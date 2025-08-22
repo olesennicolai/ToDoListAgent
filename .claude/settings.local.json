@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mcp-client list-tools:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(./venv/bin/pip list)",
+      "mcp__google-calendar__create_event",
+      "mcp__google-calendar__list_events"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
