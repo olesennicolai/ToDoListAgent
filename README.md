@@ -22,6 +22,13 @@ An MCP (Model Context Protocol) server that provides access to Google Calendar a
 
 4. **Restart Claude Code** after adding the MCP server configuration.
 
+## Local Todo CSV
+
+Create `ToDoList.csv` to track notes locally (Windows PowerShell):
+```powershell
+if (!(Test-Path .\ToDoList.csv)) { 'title,notes,due,status' | Set-Content .\ToDoList.csv }
+```
+
 ## MCP Configuration in Claude Code
 
 ### Adding MCP Servers
