@@ -80,7 +80,7 @@ Claude Code supports three types of MCP server connections:
 
 ## Manual Setup (Alternative)
 
-1. **Ensure your `credentials.json` is in this directory** ✅ (Already present)
+1. **Ensure your `credentials.json` is in this directory**
 
 2. **Create virtual environment and install dependencies:**
    ```bash
