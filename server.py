@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Google Calendar MCP Server
-Provides access to Google Calendar API through MCP protocol
+Google Calendar and Gmail MCP Server
+Provides access to Google Calendar and Gmail APIs through MCP protocol
 """
 
 import json
 import os
+import base64
+import email
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +16,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from mcp.server import Server
 from mcp.types import (
@@ -27,23 +31,27 @@ from mcp.types import (
 import mcp.server.stdio
 import mcp.types as types
 
-# Google Calendar API scopes
+# Google API scopes (Calendar + Gmail)
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly',
-          'https://www.googleapis.com/auth/calendar.events']
+          'https://www.googleapis.com/auth/calendar.events',
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/gmail.send',
+          'https://www.googleapis.com/auth/gmail.modify']
 
 # Token file to store user's access and refresh tokens
 TOKEN_FILE = 'token.json'
 CREDENTIALS_FILE = 'credentials.json'
 
-app = Server("google-calendar")
+app = Server("google-services")
 
-class GoogleCalendarService:
+class GoogleServicesClient:
     def __init__(self):
-        self.service = None
+        self.calendar_service = None
+        self.gmail_service = None
         self._authenticate()
     
     def _authenticate(self):
-        """Authenticate with Google Calendar API"""
+        """Authenticate with Google APIs"""
         creds = None
         
         # Load existing token
@@ -66,7 +74,8 @@ class GoogleCalendarService:
             with open(TOKEN_FILE, 'w') as token:
                 token.write(creds.to_json())
         
-        self.service = build('calendar', 'v3', credentials=creds)
+        self.calendar_service = build('calendar', 'v3', credentials=creds)
+        self.gmail_service = build('gmail', 'v1', credentials=creds)
     
     def list_events(self, calendar_id: str = 'primary', max_results: int = 10, 
                    time_min: Optional[str] = None, time_max: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -75,7 +84,7 @@ class GoogleCalendarService:
             if not time_min:
                 time_min = datetime.utcnow().isoformat() + 'Z'
             
-            events_result = self.service.events().list(
+            events_result = self.calendar_service.events().list(
                 calendarId=calendar_id,
                 timeMin=time_min,
                 timeMax=time_max,
@@ -91,7 +100,7 @@ class GoogleCalendarService:
     def create_event(self, calendar_id: str = 'primary', **event_data) -> Dict[str, Any]:
         """Create a new calendar event"""
         try:
-            event = self.service.events().insert(
+            event = self.calendar_service.events().insert(
                 calendarId=calendar_id,
                 body=event_data
             ).execute()
@@ -102,7 +111,7 @@ class GoogleCalendarService:
     def update_event(self, event_id: str, calendar_id: str = 'primary', **event_data) -> Dict[str, Any]:
         """Update an existing calendar event"""
         try:
-            event = self.service.events().update(
+            event = self.calendar_service.events().update(
                 calendarId=calendar_id,
                 eventId=event_id,
                 body=event_data
@@ -114,7 +123,7 @@ class GoogleCalendarService:
     def delete_event(self, event_id: str, calendar_id: str = 'primary') -> bool:
         """Delete a calendar event"""
         try:
-            self.service.events().delete(
+            self.calendar_service.events().delete(
                 calendarId=calendar_id,
                 eventId=event_id
             ).execute()
@@ -125,17 +134,92 @@ class GoogleCalendarService:
     def list_calendars(self) -> List[Dict[str, Any]]:
         """List all calendars"""
         try:
-            calendar_list = self.service.calendarList().list().execute()
+            calendar_list = self.calendar_service.calendarList().list().execute()
             return calendar_list.get('items', [])
         except HttpError as error:
             raise Exception(f"An error occurred: {error}")
+    
+    def list_messages(self, query: str = '', max_results: int = 10) -> List[Dict[str, Any]]:
+        """List Gmail messages"""
+        try:
+            result = self.gmail_service.users().messages().list(
+                userId='me', q=query, maxResults=max_results
+            ).execute()
+            messages = result.get('messages', [])
+            
+            # Get details for each message
+            detailed_messages = []
+            for msg in messages:
+                msg_detail = self.gmail_service.users().messages().get(
+                    userId='me', id=msg['id'], format='full'
+                ).execute()
+                detailed_messages.append(msg_detail)
+            
+            return detailed_messages
+        except HttpError as error:
+            raise Exception(f"An error occurred: {error}")
+    
+    def get_message(self, message_id: str) -> Dict[str, Any]:
+        """Get a specific Gmail message"""
+        try:
+            message = self.gmail_service.users().messages().get(
+                userId='me', id=message_id, format='full'
+            ).execute()
+            return message
+        except HttpError as error:
+            raise Exception(f"An error occurred: {error}")
+    
+    def send_message(self, to: str, subject: str, body: str, body_type: str = 'plain') -> Dict[str, Any]:
+        """Send a Gmail message"""
+        try:
+            if body_type == 'html':
+                message = MIMEMultipart('alternative')
+                message['to'] = to
+                message['subject'] = subject
+                html_part = MIMEText(body, 'html')
+                message.attach(html_part)
+            else:
+                message = MIMEText(body, 'plain')
+                message['to'] = to
+                message['subject'] = subject
+            
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+            
+            sent_message = self.gmail_service.users().messages().send(
+                userId='me', body={'raw': raw_message}
+            ).execute()
+            
+            return sent_message
+        except HttpError as error:
+            raise Exception(f"An error occurred: {error}")
+    
+    def search_messages(self, query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        """Search Gmail messages with advanced query"""
+        try:
+            result = self.gmail_service.users().messages().list(
+                userId='me', q=query, maxResults=max_results
+            ).execute()
+            messages = result.get('messages', [])
+            
+            # Get basic details for search results
+            detailed_messages = []
+            for msg in messages[:10]:  # Limit detailed fetch to first 10
+                msg_detail = self.gmail_service.users().messages().get(
+                    userId='me', id=msg['id'], format='metadata',
+                    metadataHeaders=['Subject', 'From', 'Date']
+                ).execute()
+                detailed_messages.append(msg_detail)
+            
+            return detailed_messages
+        except HttpError as error:
+            raise Exception(f"An error occurred: {error}")
 
-# Initialize Google Calendar service
-calendar_service = GoogleCalendarService()
+# Initialize Google Services client
+google_client = GoogleServicesClient()
 
 @app.list_tools()
 async def handle_list_tools() -> List[Tool]:
-    """List available Google Calendar tools"""
+    """List available Google Calendar and Gmail tools"""
     return [
         Tool(
             name="list_events",
@@ -264,6 +348,84 @@ async def handle_list_tools() -> List[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="list_messages",
+            description="List Gmail messages",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Gmail search query (optional)"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of messages to return",
+                        "default": 10
+                    }
+                }
+            }
+        ),
+        Tool(
+            name="get_message",
+            description="Get a specific Gmail message by ID",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "string",
+                        "description": "Gmail message ID"
+                    }
+                },
+                "required": ["message_id"]
+            }
+        ),
+        Tool(
+            name="send_message",
+            description="Send a Gmail message",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "to": {
+                        "type": "string",
+                        "description": "Recipient email address"
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Email subject"
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Email body content"
+                    },
+                    "body_type": {
+                        "type": "string",
+                        "description": "Body type: 'plain' or 'html'",
+                        "default": "plain"
+                    }
+                },
+                "required": ["to", "subject", "body"]
+            }
+        ),
+        Tool(
+            name="search_messages",
+            description="Search Gmail messages with advanced query",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Gmail search query (e.g., 'from:example@gmail.com', 'subject:meeting', 'is:unread')"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of messages to return",
+                        "default": 20
+                    }
+                },
+                "required": ["query"]
+            }
         )
     ]
 
@@ -272,7 +434,7 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
     """Handle tool calls"""
     try:
         if name == "list_events":
-            events = calendar_service.list_events(**arguments)
+            events = google_client.list_events(**arguments)
             events_text = "📅 **Google Calendar Events**\n\n"
             
             if not events:
@@ -309,7 +471,7 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
                 event_data['location'] = arguments['location']
             
             calendar_id = arguments.get('calendar_id', 'primary')
-            event = calendar_service.create_event(calendar_id, **event_data)
+            event = google_client.create_event(calendar_id, **event_data)
             
             return [types.TextContent(
                 type="text", 
@@ -333,7 +495,7 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
             if arguments.get('end_time'):
                 event_data['end'] = {'dateTime': arguments['end_time'], 'timeZone': 'UTC'}
             
-            event = calendar_service.update_event(event_id, calendar_id, **event_data)
+            event = google_client.update_event(event_id, calendar_id, **event_data)
             
             return [types.TextContent(
                 type="text", 
@@ -344,7 +506,7 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
             event_id = arguments['event_id']
             calendar_id = arguments.get('calendar_id', 'primary')
             
-            calendar_service.delete_event(event_id, calendar_id)
+            google_client.delete_event(event_id, calendar_id)
             
             return [types.TextContent(
                 type="text", 
@@ -352,7 +514,7 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
             )]
         
         elif name == "list_calendars":
-            calendars = calendar_service.list_calendars()
+            calendars = google_client.list_calendars()
             calendars_text = "📅 **Available Calendars**\n\n"
             
             for calendar in calendars:
@@ -363,6 +525,95 @@ async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent
                 calendars_text += "\n"
             
             return [types.TextContent(type="text", text=calendars_text)]
+        
+        elif name == "list_messages":
+            query = arguments.get('query', '')
+            max_results = arguments.get('max_results', 10)
+            messages = google_client.list_messages(query=query, max_results=max_results)
+            
+            messages_text = "📧 **Gmail Messages**\n\n"
+            if not messages:
+                messages_text += "No messages found."
+            else:
+                for msg in messages:
+                    headers = {h['name']: h['value'] for h in msg.get('payload', {}).get('headers', [])}
+                    subject = headers.get('Subject', 'No subject')
+                    sender = headers.get('From', 'Unknown sender')
+                    date = headers.get('Date', 'Unknown date')
+                    
+                    messages_text += f"• **{subject}**\n"
+                    messages_text += f"  👤 {sender}\n"
+                    messages_text += f"  📅 {date}\n"
+                    messages_text += f"  🆔 {msg.get('id')}\n\n"
+            
+            return [types.TextContent(type="text", text=messages_text)]
+        
+        elif name == "get_message":
+            message_id = arguments['message_id']
+            message = google_client.get_message(message_id)
+            
+            headers = {h['name']: h['value'] for h in message.get('payload', {}).get('headers', [])}
+            subject = headers.get('Subject', 'No subject')
+            sender = headers.get('From', 'Unknown sender')
+            date = headers.get('Date', 'Unknown date')
+            
+            # Extract message body
+            body = ""
+            payload = message.get('payload', {})
+            if 'parts' in payload:
+                for part in payload['parts']:
+                    if part.get('mimeType') == 'text/plain':
+                        data = part.get('body', {}).get('data', '')
+                        if data:
+                            body = base64.urlsafe_b64decode(data).decode('utf-8')
+                            break
+            elif payload.get('mimeType') == 'text/plain':
+                data = payload.get('body', {}).get('data', '')
+                if data:
+                    body = base64.urlsafe_b64decode(data).decode('utf-8')
+            
+            message_text = f"📧 **{subject}**\n\n"
+            message_text += f"**From:** {sender}\n"
+            message_text += f"**Date:** {date}\n"
+            message_text += f"**Message ID:** {message_id}\n\n"
+            message_text += f"**Body:**\n{body[:500]}..." if len(body) > 500 else f"**Body:**\n{body}"
+            
+            return [types.TextContent(type="text", text=message_text)]
+        
+        elif name == "send_message":
+            to = arguments['to']
+            subject = arguments['subject']
+            body = arguments['body']
+            body_type = arguments.get('body_type', 'plain')
+            
+            sent_message = google_client.send_message(to, subject, body, body_type)
+            
+            return [types.TextContent(
+                type="text",
+                text=f"✅ Email sent successfully!\n\n**To:** {to}\n**Subject:** {subject}\n**Message ID:** {sent_message.get('id')}"
+            )]
+        
+        elif name == "search_messages":
+            query = arguments['query']
+            max_results = arguments.get('max_results', 20)
+            messages = google_client.search_messages(query, max_results)
+            
+            search_text = f"🔍 **Search Results for:** {query}\n\n"
+            if not messages:
+                search_text += "No messages found matching the query."
+            else:
+                for msg in messages:
+                    headers = {h['name']: h['value'] for h in msg.get('payload', {}).get('headers', [])}
+                    subject = headers.get('Subject', 'No subject')
+                    sender = headers.get('From', 'Unknown sender')
+                    date = headers.get('Date', 'Unknown date')
+                    
+                    search_text += f"• **{subject}**\n"
+                    search_text += f"  👤 {sender}\n"
+                    search_text += f"  📅 {date}\n"
+                    search_text += f"  🆔 {msg.get('id')}\n\n"
+            
+            return [types.TextContent(type="text", text=search_text)]
         
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]

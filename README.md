@@ -1,6 +1,6 @@
-# Google Calendar MCP Server
+# Google Services MCP Server
 
-An MCP (Model Context Protocol) server that provides access to Google Calendar functionality through Claude Code and the calendar-todo-sync agent.
+An MCP (Model Context Protocol) server that provides access to Google Calendar and Gmail functionality through Claude Code with specialized agents.
 
 ## Quick Setup
 
@@ -17,8 +17,59 @@ An MCP (Model Context Protocol) server that provides access to Google Calendar f
 
 3. **Add to Claude Code:**
    ```bash
-   reaclaude mcp add google-calendar --scope local -- ./venv/bin/python server.py
+   claude mcp add google-services --scope local -- ./venv/bin/python server.py
    ```
+
+4. **Restart Claude Code** after adding the MCP server configuration.
+
+## MCP Configuration in Claude Code
+
+### Adding MCP Servers
+
+Claude Code supports three types of MCP server connections:
+
+1. **Local stdio server (used by this project):**
+   ```bash
+   claude mcp add <name> -- <command>
+   ```
+
+2. **Remote SSE server:**
+   ```bash
+   claude mcp add --transport sse <name> <url>
+   ```
+
+3. **Remote HTTP server:**
+   ```bash
+   claude mcp add --transport http <name> <url>
+   ```
+
+### Configuration Options
+
+- **Scope levels:**
+  - `--scope local` (default): Project-specific configuration
+  - `--scope project`: Shared with team members
+  - `--scope user`: Available across all projects
+
+- **Environment variables:**
+  ```bash
+  claude mcp add <name> --env KEY=value -- <command>
+  ```
+
+- **Authentication headers (for remote servers):**
+  ```bash
+  claude mcp add <name> --header "Authorization: Bearer token" -- <command>
+  ```
+
+### Managing MCP Servers
+
+- **List all servers:** `claude mcp list`
+- **Get server details:** `claude mcp get <name>`
+- **Remove a server:** `claude mcp remove <name>`
+
+### Important Notes
+
+- **Restart Required:** You must restart Claude Code after adding or modifying MCP server configurations
+- **Authentication:** Use the `/mcp` command within Claude Code to authenticate remote servers if needed
 
 ## Manual Setup (Alternative)
 
@@ -38,55 +89,84 @@ An MCP (Model Context Protocol) server that provides access to Google Calendar f
 
 ## Available MCP Tools
 
-Once configured, the calendar-todo-sync agent will have access to:
+Once configured, Claude Code agents will have access to:
 
-- `mcp__list_events` - List upcoming calendar events
-- `mcp__create_event` - Create new calendar events
-- `mcp__update_event` - Update existing events
-- `mcp__delete_event` - Delete calendar events
-- `mcp__list_calendars` - List all available calendars
+### Google Calendar Tools
+- `mcp__google-services__list_events` - List upcoming calendar events
+- `mcp__google-services__create_event` - Create new calendar events
+- `mcp__google-services__update_event` - Update existing events
+- `mcp__google-services__delete_event` - Delete calendar events
+- `mcp__google-services__list_calendars` - List all available calendars
 
-## Integration with calendar-todo-sync Agent
+### Gmail Tools
+- `mcp__google-services__list_messages` - List Gmail messages with optional search query
+- `mcp__google-services__get_message` - Get a specific message by ID with full content
+- `mcp__google-services__send_message` - Send emails (plain text or HTML)
+- `mcp__google-services__search_messages` - Advanced Gmail search with query support
 
-The calendar-todo-sync agent can now:
+### Gmail Search Examples
+- `from:example@gmail.com` - Emails from specific sender
+- `subject:meeting` - Emails with specific subject
+- `is:unread` - Unread emails
+- `after:2024/1/1` - Emails after specific date
+- `has:attachment` - Emails with attachments
+
+## Integration with Specialized Agents
+
+### calendar-todo-sync Agent
 - Read your calendar events and sync them to ToDoList.csv
 - Create calendar events from todo items with due dates
 - Keep your calendar and todo list synchronized bidirectionally
 
+### email-assistant Agent
+- Send automated emails and notifications
+- Process incoming emails and extract action items
+- Create email templates and manage communication workflows
+
+### notification-manager Agent
+- Send system notifications via email
+- Manage critical alerts and reminders
+- Handle automated communication workflows
+
 ## Current Project Status
 
 ### ✅ **Completed:**
-- Google Calendar MCP server fully implemented
+- **Google Services MCP server fully implemented** with Calendar + Gmail support
 - Python virtual environment created with all dependencies
 - OAuth credentials configured (`credentials.json` present)
 - **OAuth authentication completed successfully** (`token.json` generated)
 - **Google Calendar API enabled** and access verified
+- **Gmail API integrated** with comprehensive email functionality
 - Calendar-todo-sync agent created and ready
+- Email-assistant and notification-manager agents supported
 - All necessary scripts and configurations in place
-- **Calendar access tested** - Successfully connected to Google Calendar with 2 calendars detected
+- **Calendar access tested** - Successfully connected to Google Calendar
 - **MCP server registered with Claude Code** - Added using reaclaude command
-- **MCP functionality verified** - Successfully listed events and created new calendar entries
+- **MCP functionality verified** - Calendar and Gmail tools implemented
 
 ### 🔄 **Ready for Use:**
 - **Todo List Management**: `ToDoList.csv` managed by `todo-list-manager` agent
 - **Calendar Integration**: `calendar-todo-sync` agent can bidirectionally sync with Google Calendar
-- **MCP Tools Available**: List/create/update/delete calendar events
-- **Authentication**: Fully authenticated with Google Calendar API
+- **Email Automation**: `email-assistant` and `notification-manager` agents for Gmail functionality
+- **MCP Tools Available**: Complete Google Calendar and Gmail API access
+- **Authentication**: Fully authenticated with Google Calendar and Gmail APIs
 
-### 📋 **Next Actions Needed:**
+### 📋 **Next Actions:**
 1. ~~Complete OAuth authentication~~ ✅ **DONE**
 2. ~~Add MCP server to Claude Code settings~~ ✅ **DONE**
-3. ~~Test calendar-todo sync functionality with real data~~ ✅ **DONE**
+3. ~~Test calendar-todo sync functionality~~ ✅ **DONE**
+4. ~~Implement Gmail integration~~ ✅ **DONE**
+5. **Re-authenticate with new Gmail scopes** (required on first Gmail tool use)
 
-**All setup and testing complete! Ready for production use.**
+**Google Services MCP server ready for production use with Calendar + Gmail!**
 
 ## Files
 
-- `server.py` - Main MCP server implementation ✅
+- `server.py` - Main MCP server implementation with Calendar + Gmail support ✅
 - `requirements.txt` - Python dependencies ✅
 - `config.json` - MCP server configuration with venv paths ✅
 - `credentials.json` - Google OAuth credentials ✅
-- `token.json` - Generated OAuth token ✅ **CREATED**
+- `token.json` - Generated OAuth token (needs re-auth for Gmail scopes)
 - `setup.sh` - Automated setup script ✅
 - `test_auth.py` - Authentication testing utility ✅
 - `run_with_venv.sh` - Script to ensure venv usage ✅
