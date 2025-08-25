@@ -135,6 +135,11 @@ Once configured, Claude Code agents will have access to:
 - Manage critical alerts and reminders
 - Handle automated communication workflows
 
+### email-sender-bot Agent
+- Send emails to contacts from contacts.csv file
+- Look up contact information automatically
+- Handle bulk email sending to multiple contacts
+
 ## Current Project Status
 
 ### ✅ **Completed:**
@@ -180,3 +185,4 @@ Once configured, Claude Code agents will have access to:
 - `venv/` - Python virtual environment with dependencies ✅
 - `CLAUDE.md` - Updated project configuration ✅
 - `ToDoList.csv` - Todo list file ✅
+- `contacts.csv` - Contact information for email-sender-bot agent ✅

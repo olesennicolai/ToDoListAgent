@@ -9,6 +9,13 @@
   - Get task recommendations
   - Manage task priorities
 
+## Email Contact Management
+- Contact list file: `contacts.csv`
+- Use the `email-sender-bot` agent when user wants to:
+  - Send emails to specific contacts
+  - Send bulk emails to multiple contacts
+  - Look up contact information automatically
+
 ## Google Calendar & Gmail Integration
 - MCP server configured for Google Calendar and Gmail access
 - Use the `calendar-todo-sync` agent for:
@@ -39,6 +46,7 @@
 
 ## Project Files
 - Main todo list: `ToDoList.csv` (private, not tracked)
+- Contact list: `contacts.csv` (for email-sender-bot agent)
 - Project documentation: `README.md`, `PROJECT_STATUS.md`
 - Dependencies: `requirements.txt`
 - Logs: `auth_output.log`
